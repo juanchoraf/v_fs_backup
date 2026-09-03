@@ -34,12 +34,16 @@ enum ParsedCommand {
     Run(Cli),
     CheckUpdate,
     Update,
+    Install,
+    Uninstall,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum UpdateMode {
-    Check,
-    Install,
+enum ControlMode {
+    CheckUpdate,
+    Update,
+    InstallApp,
+    UninstallApp,
 }
 
 #[derive(Debug, Clone)]
@@ -158,4 +162,3 @@ struct ArchiveProgressMonitor {
     started: Instant,
     compressed_bytes: Arc<AtomicU64>,
 }
-

@@ -14,15 +14,6 @@ pub(super) fn install_downloaded_asset(path: &Path, asset_name: &str) -> Result<
         return install_windows_asset(path, asset_name);
     }
 
-    if asset_name.ends_with(".deb") {
-        return install_deb(path);
-    }
-    if asset_name.ends_with(".pkg") {
-        return install_pkg(path);
-    }
-    if asset_name.ends_with(".tar.gz") || asset_name.ends_with(".zip") {
-        return install_unix_archive(path, asset_name);
-    }
     if is_raw_binary_asset(asset_name) {
         return install_binary_over_current(path);
     }
@@ -33,7 +24,8 @@ pub(super) fn install_downloaded_asset(path: &Path, asset_name: &str) -> Result<
 }
 
 fn is_raw_binary_asset(asset_name: &str) -> bool {
-    !asset_name.contains('.') && asset_name.starts_with(APP_NAME)
+    asset_name.starts_with(APP_NAME)
+        && (asset_name.ends_with("_x86_64") || asset_name.ends_with("_arm64"))
 }
 
 fn install_windows_asset(path: &Path, asset_name: &str) -> Result<String> {
@@ -48,10 +40,9 @@ fn install_windows_asset(path: &Path, asset_name: &str) -> Result<String> {
 
 fn stage_windows_binary_update(new_binary: &Path) -> Result<String> {
     let current = env::current_exe().context("failed to resolve current executable path")?;
-    let parent = current
-        .parent()
-        .ok_or_else(|| simple_error("failed to resolve current executable parent directory"))?;
-    let staged = parent.join(v_concat!(".{APP_NAME}_update_{}.exe", std::process::id()));
+    let temp_dir = prepare_temp_dir("windows-update")?;
+    let staged = temp_dir.join(v_concat!("{APP_NAME}_update_{}.exe", std::process::id()));
+    let script_path = temp_dir.join(v_concat!("{APP_NAME}_update_{}.ps1", std::process::id()));
 
     fs::copy(new_binary, &staged).with_context(|| {
         format!(
@@ -62,38 +53,34 @@ fn stage_windows_binary_update(new_binary: &Path) -> Result<String> {
     })?;
 
     let script = r#"
+param(
+    [Parameter(Mandatory = $true)][string]$Source,
+    [Parameter(Mandatory = $true)][string]$Target,
+    [Parameter(Mandatory = $true)][int]$PidToWait
+)
 $ErrorActionPreference = 'Stop'
-$source = $env:V_FS_BACKUP_UPDATE_SOURCE
-$target = $env:V_FS_BACKUP_UPDATE_TARGET
-$pidToWait = [int]$env:V_FS_BACKUP_UPDATE_PID
 try {
-    Wait-Process -Id $pidToWait -Timeout 120 -ErrorAction SilentlyContinue
+    Wait-Process -Id $PidToWait -Timeout 120 -ErrorAction SilentlyContinue
 }
 catch {}
 Start-Sleep -Milliseconds 300
-Copy-Item -LiteralPath $source -Destination $target -Force
-Remove-Item -LiteralPath $source -Force -ErrorAction SilentlyContinue
+Copy-Item -LiteralPath $Source -Destination $Target -Force
+Remove-Item -LiteralPath $Source -Force -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
 "#;
+    fs::write(&script_path, script).with_context(|| {
+        format!(
+            "failed to write Windows update script '{}'",
+            script_path.display()
+        )
+    })?;
 
-    Command::new("powershell.exe")
-        .args([
-            "-NoLogo",
-            "-NoProfile",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-WindowStyle",
-            "Hidden",
-            "-Command",
-            script,
-        ])
-        .env("V_FS_BACKUP_UPDATE_SOURCE", &staged)
-        .env("V_FS_BACKUP_UPDATE_TARGET", &current)
-        .env("V_FS_BACKUP_UPDATE_PID", std::process::id().to_string())
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn()
-        .with_context(|| "failed to start background Windows binary updater".to_owned())?;
+    let needs_elevation = !target_parent_is_writable(&current);
+    if !spawn_windows_update_script(&script_path, &staged, &current, needs_elevation)?
+        && !needs_elevation
+    {
+        spawn_windows_update_script(&script_path, &staged, &current, true)?;
+    }
 
     Ok(
         "Staged the Windows binary update. Close and open v_fs_backup again to apply it."
@@ -101,83 +88,18 @@ Remove-Item -LiteralPath $source -Force -ErrorAction SilentlyContinue
     )
 }
 
-fn install_deb(path: &Path) -> Result<String> {
-    let package = path.as_os_str().to_os_string();
-    if command_available("apt") {
-        run_privileged(
-            "apt",
-            vec![OsString::from("install"), OsString::from("-y"), package],
-        )?;
-        return Ok("Installed the Debian package with apt.".to_owned());
+fn target_parent_is_writable(target: &Path) -> bool {
+    let Some(parent) = target.parent() else {
+        return false;
+    };
+    let probe = parent.join(v_concat!(".{APP_NAME}_write_test_{}", std::process::id()));
+    match fs::write(&probe, b"") {
+        Ok(()) => {
+            let _ = fs::remove_file(probe);
+            true
+        }
+        Err(_) => false,
     }
-    if command_available("apt-get") {
-        run_privileged(
-            "apt-get",
-            vec![
-                OsString::from("install"),
-                OsString::from("-y"),
-                path.as_os_str().to_os_string(),
-            ],
-        )?;
-        return Ok("Installed the Debian package with apt-get.".to_owned());
-    }
-    if command_available("dpkg") {
-        run_privileged(
-            "dpkg",
-            vec![OsString::from("-i"), path.as_os_str().to_os_string()],
-        )?;
-        return Ok("Installed the Debian package with dpkg.".to_owned());
-    }
-
-    Err(simple_error(
-        "downloaded a .deb update, but apt, apt-get, and dpkg were not found",
-    ))
-}
-
-fn install_pkg(path: &Path) -> Result<String> {
-    run_privileged(
-        "installer",
-        vec![
-            OsString::from("-pkg"),
-            path.as_os_str().to_os_string(),
-            OsString::from("-target"),
-            OsString::from("/"),
-        ],
-    )?;
-    Ok("Installed the macOS package with installer.".to_owned())
-}
-
-fn install_unix_archive(path: &Path, asset_name: &str) -> Result<String> {
-    let extract_dir = prepare_temp_dir("extract")?;
-    if asset_name.ends_with(".tar.gz") {
-        run_command(
-            Command::new("tar")
-                .arg("-xzf")
-                .arg(path)
-                .arg("-C")
-                .arg(&extract_dir),
-            "extract update archive",
-        )?;
-    } else {
-        run_command(
-            Command::new("unzip")
-                .arg("-q")
-                .arg(path)
-                .arg("-d")
-                .arg(&extract_dir),
-            "extract update archive",
-        )?;
-    }
-
-    let new_binary = extract_dir.join(APP_NAME).join("bin").join(APP_NAME);
-    if !new_binary.is_file() {
-        return Err(simple_error(v_concat!(
-            "update archive did not contain '{}'",
-            new_binary.display()
-        )));
-    }
-
-    install_binary_over_current(&new_binary)
 }
 
 fn install_binary_over_current(new_binary: &Path) -> Result<String> {
@@ -246,6 +168,76 @@ fn run_privileged(program: &str, args: Vec<OsString>) -> Result<()> {
     let mut command = Command::new("sudo");
     command.arg(program).args(&args);
     run_command(&mut command, program)
+}
+
+#[cfg(windows)]
+fn spawn_windows_update_script(
+    script: &Path,
+    source: &Path,
+    target: &Path,
+    elevated: bool,
+) -> Result<bool> {
+    let mut args = vec![
+        "-NoLogo".to_owned(),
+        "-NoProfile".to_owned(),
+        "-ExecutionPolicy".to_owned(),
+        "Bypass".to_owned(),
+        "-WindowStyle".to_owned(),
+        "Hidden".to_owned(),
+        "-File".to_owned(),
+        script.display().to_string(),
+        "-Source".to_owned(),
+        source.display().to_string(),
+        "-Target".to_owned(),
+        target.display().to_string(),
+        "-PidToWait".to_owned(),
+        std::process::id().to_string(),
+    ];
+
+    if elevated {
+        let argument_list = args
+            .drain(..)
+            .map(|arg| format!("'{}'", arg.replace('\'', "''")))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let script = format!(
+            "Start-Process -FilePath 'powershell.exe' -ArgumentList @({argument_list}) -Verb RunAs"
+        );
+        run_command(
+            Command::new("powershell.exe")
+                .args([
+                    "-NoLogo",
+                    "-NoProfile",
+                    "-ExecutionPolicy",
+                    "Bypass",
+                    "-Command",
+                ])
+                .arg(script)
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null()),
+            "start elevated Windows binary updater",
+        )?;
+        return Ok(true);
+    }
+
+    Ok(Command::new("powershell.exe")
+        .args(args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .is_ok())
+}
+
+#[cfg(not(windows))]
+fn spawn_windows_update_script(
+    _script: &Path,
+    _source: &Path,
+    _target: &Path,
+    _elevated: bool,
+) -> Result<bool> {
+    Ok(false)
 }
 
 fn is_root() -> bool {

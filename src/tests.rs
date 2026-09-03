@@ -172,6 +172,20 @@ fn update_commands_parse_from_cli_and_interactive_input() {
 }
 
 #[test]
+fn install_commands_parse_from_cli_and_interactive_input() {
+    let install_command =
+        parse_command_from([OsString::from("v_fs_backup"), OsString::from("--install")])
+            .unwrap()
+            .unwrap();
+    assert!(matches!(install_command, ParsedCommand::Install));
+
+    let uninstall_command = parse_command_from(interactive_args_from_line("uninstall").unwrap())
+        .unwrap()
+        .unwrap();
+    assert!(matches!(uninstall_command, ParsedCommand::Uninstall));
+}
+
+#[test]
 fn update_commands_reject_backup_or_restore_options() {
     let error = parse_command_from([
         OsString::from("v_fs_backup"),

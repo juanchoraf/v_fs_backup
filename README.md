@@ -16,6 +16,56 @@ Archives use a zstd-compressed stream. Repeated files and build trees can
 compress very well. Photos, videos, ZIP files, encrypted files, and other data
 that is already compressed may not become much smaller.
 
+## Install From Release Binary
+
+Download the matching binary from GitHub Releases. Versioned release binaries
+install themselves when opened with no arguments. You can also install
+explicitly:
+
+```bash
+# Linux
+chmod +x ./v_fs_backup_vVERSION_linux_x86_64
+sudo ./v_fs_backup_vVERSION_linux_x86_64 --install
+
+# macOS
+chmod +x ./v_fs_backup_vVERSION_macos_arm64
+sudo ./v_fs_backup_vVERSION_macos_arm64 --install
+```
+
+On Windows, run the downloaded `.exe` or install explicitly from PowerShell:
+
+```powershell
+.\v_fs_backup_vVERSION_windows_x86_64.exe --install
+```
+
+The Windows installer requests Administrator privileges through UAC when
+needed. The installed app is available from a new terminal as `v_fs_backup`.
+Linux installs `/usr/local/bin/v_fs_backup`, desktop launcher metadata, app
+icons, and the `.fsb` MIME icon. macOS installs `/usr/local/bin/v_fs_backup`
+and `/Applications/v_fs_backup.app`. Windows installs into Program Files,
+adds a Start menu shortcut, registers PATH, and registers the `.fsb` icon.
+
+Remove the installed app and OS registrations with:
+
+```bash
+v_fs_backup --uninstall
+```
+
+No install or uninstall scripts are required.
+
+## Build Release Binaries
+
+Build scripts create direct, self-installing 64-bit binaries under
+`versions/v_fs_backup_vVERSION/`:
+
+```bash
+sh scripts/build_binaries.sh --locked --no-update
+```
+
+Run the wrapper on each OS, or call the OS-specific script directly:
+`scripts/build_binaries_linux.sh`, `scripts/build_binaries_macos.sh`,
+`scripts/build_binaries_unix.sh`, or `scripts/build_binaries_windows.ps1`.
+
 ## Interactive Console
 
 Start an installed copy with:

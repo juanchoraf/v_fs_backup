@@ -129,15 +129,15 @@ mod tests {
                 "tag_name": "v1.2.3",
                 "assets": [
                     {
-                        "name": "v_fs_backup_v1.2.3_linux_x86_64.deb",
-                        "browser_download_url": "https://example.test/download.deb"
+                        "name": "v_fs_backup_v1.2.3_linux_x86_64",
+                        "browser_download_url": "https://example.test/v_fs_backup"
                     }
                 ]
             }"#,
         );
 
         assert_eq!(assets.len(), 1);
-        assert_eq!(assets[0].name, "v_fs_backup_v1.2.3_linux_x86_64.deb");
-        assert_eq!(assets[0].download_url, "https://example.test/download.deb");
+        assert_eq!(assets[0].name, "v_fs_backup_v1.2.3_linux_x86_64");
+        assert_eq!(assets[0].download_url, "https://example.test/v_fs_backup");
     }
 }

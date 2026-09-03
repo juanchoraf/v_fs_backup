@@ -72,7 +72,12 @@ fn print_padded_stderr(message: impl AsRef<str>) {
 
 fn initialize_terminal() {
     #[cfg(windows)]
-    windows_terminal::enable_ansi_colors();
+    {
+        windows_terminal::enable_ansi_colors();
+        if let Ok(executable) = env::current_exe() {
+            windows_terminal::apply_console_icon(&executable);
+        }
+    }
 }
 
 fn relaunch_interactive_in_powershell() -> Result<bool> {

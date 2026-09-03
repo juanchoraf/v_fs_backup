@@ -14,23 +14,15 @@ echo() {
     v_concat "$*"
 }
 
-v_concat ""
-
 usage() {
-    v_concat "$(cat <<'USAGE'
-Usage: sh scripts/build_binaries_unix.sh [--locked] [--no-update]
+    v_concat "Usage: sh scripts/build_binaries_unix.sh [--locked] [--no-update]
 
-Builds generic 64-bit Unix/BSD v_fs_backup portable artifacts for the current
-machine. Linux and macOS have richer native package builders; this script is
-for BSD and other Unix-like systems where a portable tarball/zip is the release
-format.
+Builds the current Unix/BSD 64-bit self-installing v_fs_backup binary.
 
 Options:
   --locked     Use Cargo.lock exactly as-is
   --no-update  Do not run cargo update before building
-  -h, --help   Show this help
-USAGE
-)"
+  -h, --help   Show this help"
 }
 
 while [ "$#" -gt 0 ]; do
@@ -94,48 +86,26 @@ need_command() {
     fi
 }
 
-print_success() {
-    v_concat "$(printf '\033[32m%s\033[0m' "$1")"
-}
-
 package_version() {
     sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | sed -n '1p'
 }
 
-write_checksums() {
-    checksums_file="$1"
-    shift
-    checksums_name=$(basename "$checksums_file")
-
+write_checksum() {
+    artifact="$1"
+    checksums_file="$OUT_DIR/$artifact.sha256"
     rm -f "$checksums_file"
     if command -v sha256sum >/dev/null 2>&1; then
-        (
-            cd "$OUT_DIR"
-            for artifact in "$@"; do
-                [ -f "$artifact" ] && sha256sum "$artifact" >> "$checksums_name"
-            done
-        )
+        (cd "$OUT_DIR" && sha256sum "$artifact" > "$artifact.sha256")
     elif command -v shasum >/dev/null 2>&1; then
-        (
-            cd "$OUT_DIR"
-            for artifact in "$@"; do
-                [ -f "$artifact" ] && shasum -a 256 "$artifact" >> "$checksums_name"
-            done
-        )
+        (cd "$OUT_DIR" && shasum -a 256 "$artifact" > "$artifact.sha256")
     elif command -v sha256 >/dev/null 2>&1; then
-        (
-            cd "$OUT_DIR"
-            for artifact in "$@"; do
-                [ -f "$artifact" ] && printf '%s  %s\n' "$(sha256 -q "$artifact")" "$artifact" >> "$checksums_name"
-            done
-        )
+        (cd "$OUT_DIR" && printf '%s  %s\n' "$(sha256 -q "$artifact")" "$artifact" > "$artifact.sha256")
     else
-        echo "note: SHA-256 command not found; skipped checksums"
+        echo "note: SHA-256 command not found; skipped checksum"
     fi
 }
 
 need_command cargo
-need_command tar
 
 VERSION=$(package_version)
 if [ -z "$VERSION" ]; then
@@ -147,19 +117,8 @@ PLATFORM_OS=$(normalize_os)
 PLATFORM_ARCH=$(normalize_arch)
 VERSIONED_NAME="${APP_NAME}_v${VERSION}"
 OUT_DIR="$VERSIONS_DIR/$VERSIONED_NAME"
-STAGE_DIR="$OUT_DIR/.stage-$PLATFORM_OS"
 BINARY="target/release/$APP_NAME"
-LOGO_PNG="assets/v_fs_backup_logo_256.png"
-LOGO_ICNS="assets/v_fs_backup_logo.icns"
-ARTIFACT_ARCH="${PLATFORM_OS}_${PLATFORM_ARCH}"
-ARTIFACT_BASENAME="${VERSIONED_NAME}_${ARTIFACT_ARCH}"
-PORTABLE_TAR="$ARTIFACT_BASENAME.tar.gz"
-PORTABLE_ZIP="$ARTIFACT_BASENAME.zip"
-
-if [ ! -f "$LOGO_PNG" ]; then
-    echo "error: missing logo asset: $LOGO_PNG. Run scripts/prepare_logo_assets.py first." >&2
-    exit 1
-fi
+ARTIFACT="${VERSIONED_NAME}_${PLATFORM_OS}_${PLATFORM_ARCH}"
 
 if [ "$UPDATE_DEPS" -eq 1 ]; then
     cargo update
@@ -173,41 +132,9 @@ if [ ! -x "$BINARY" ]; then
 fi
 
 mkdir -p "$OUT_DIR"
-rm -rf "$STAGE_DIR"
-rm -f "$OUT_DIR/$ARTIFACT_BASENAME" "$OUT_DIR/$ARTIFACT_BASENAME".*
-mkdir -p "$STAGE_DIR/$APP_NAME/bin"
-mkdir -p "$STAGE_DIR/$APP_NAME/docs"
-mkdir -p "$STAGE_DIR/$APP_NAME/assets"
+rm -f "$OUT_DIR/$ARTIFACT" "$OUT_DIR/$ARTIFACT.sha256"
+cp "$BINARY" "$OUT_DIR/$ARTIFACT"
+chmod 0755 "$OUT_DIR/$ARTIFACT"
+write_checksum "$ARTIFACT"
 
-cp "$BINARY" "$OUT_DIR/$ARTIFACT_BASENAME"
-cp "$BINARY" "$STAGE_DIR/$APP_NAME/bin/$APP_NAME"
-cp README.md "$STAGE_DIR/$APP_NAME/docs/README.md"
-cp "$LOGO_PNG" "$STAGE_DIR/$APP_NAME/assets/v_fs_backup_logo.png"
-if [ -f "$LOGO_ICNS" ]; then
-    cp "$LOGO_ICNS" "$STAGE_DIR/$APP_NAME/assets/v_fs_backup_logo.icns"
-fi
-chmod 0755 "$OUT_DIR/$ARTIFACT_BASENAME"
-chmod 0755 "$STAGE_DIR/$APP_NAME/bin/$APP_NAME"
-
-tar -czf "$OUT_DIR/$PORTABLE_TAR" -C "$STAGE_DIR" "$APP_NAME"
-echo "packaged $OUT_DIR/$PORTABLE_TAR"
-
-if command -v zip >/dev/null 2>&1; then
-    (
-        cd "$STAGE_DIR"
-        zip -qr "../$PORTABLE_ZIP" "$APP_NAME"
-    )
-    echo "packaged $OUT_DIR/$PORTABLE_ZIP"
-else
-    echo "note: zip not found; skipped $OUT_DIR/$PORTABLE_ZIP"
-fi
-
-write_checksums "$OUT_DIR/$ARTIFACT_BASENAME.sha256" \
-    "$ARTIFACT_BASENAME" \
-    "$PORTABLE_TAR" \
-    "$PORTABLE_ZIP"
-
-rm -rf "$STAGE_DIR"
-
-print_success "Unix/BSD artifacts created under $OUT_DIR"
-v_concat ""
+v_concat "$(printf '\033[32m%s\033[0m' "Unix/BSD binary created: $OUT_DIR/$ARTIFACT")"

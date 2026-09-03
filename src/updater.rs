@@ -190,16 +190,7 @@ fn select_asset<'a>(assets: &'a [GitHubAsset], candidates: &[String]) -> Option<
 }
 
 fn checksum_name_for(asset_name: &str) -> String {
-    let base = asset_name
-        .strip_suffix(".tar.gz")
-        .or_else(|| asset_name.strip_suffix(".zip"))
-        .or_else(|| asset_name.strip_suffix(".deb"))
-        .or_else(|| asset_name.strip_suffix(".pkg"))
-        .or_else(|| asset_name.strip_suffix(".exe"))
-        .or_else(|| asset_name.strip_suffix(".msi"))
-        .unwrap_or(asset_name);
-
-    v_concat!("{base}.sha256")
+    v_concat!("{asset_name}.sha256")
 }
 
 fn verify_download_checksum(
@@ -440,18 +431,14 @@ mod tests {
     }
 
     #[test]
-    fn checksum_names_match_packaging_scripts() {
+    fn checksum_names_match_binary_assets() {
         assert_eq!(
-            checksum_name_for("v_fs_backup_v1.2.3_linux_x86_64.tar.gz"),
+            checksum_name_for("v_fs_backup_v1.2.3_linux_x86_64"),
             "v_fs_backup_v1.2.3_linux_x86_64.sha256"
         );
         assert_eq!(
             checksum_name_for("v_fs_backup_v1.2.3_windows_x86_64.exe"),
-            "v_fs_backup_v1.2.3_windows_x86_64.sha256"
-        );
-        assert_eq!(
-            checksum_name_for("v_fs_backup_v1.2.3_linux_x86_64"),
-            "v_fs_backup_v1.2.3_linux_x86_64.sha256"
+            "v_fs_backup_v1.2.3_windows_x86_64.exe.sha256"
         );
     }
 
