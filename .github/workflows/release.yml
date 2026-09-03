@@ -1,119 +1,212 @@
 name: Release
 
 on:
-  release:
-    types:
-      - published
+  push:
+    tags:
+      - "v*"
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing release tag to upload artifacts to
+        description: "Release tag, for example v0.1.1"
         required: true
+        type: string
 
 permissions:
+  actions: read
   contents: write
 
 env:
-  RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+  CARGO_TERM_COLOR: always
 
 jobs:
-  linux:
-    name: Linux x86_64
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Install build prerequisites
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y zip
-          if ! command -v cargo >/dev/null 2>&1; then
-            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
-            echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
-          fi
-          rustup toolchain install stable --profile minimal
-          rustup default stable
-
-      - name: Build release artifacts
-        run: ./scripts/build_binaries_linux.sh --locked
-
-      - name: Upload release artifacts
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          find versions -maxdepth 2 -type f -name 'v_fs_backup_v*' -print0 |
-            while IFS= read -r -d '' artifact; do
-              gh release upload "$RELEASE_TAG" "$artifact" --clobber
-            done
-
-  macos:
-    name: macOS ${{ matrix.arch }}
+  build-linux:
+    name: Build ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    container: rust:1-bullseye
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
         include:
-          - runner: macos-13
-            arch: x86_64
-          - runner: macos-14
-            arch: arm64
-    runs-on: ${{ matrix.runner }}
+          - name: linux-x86_64
+            runner: ubuntu-24.04
+          - name: linux-arm64
+            runner: ubuntu-24.04-arm
+
     steps:
-      - uses: actions/checkout@v7
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2.9.2
+        with:
+          shared-key: release-${{ matrix.name }}
+
+      - name: Check tag matches Cargo version
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }}
+        run: |
+          version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | sed -n '1p')
+          tag_version="${RELEASE_TAG#v}"
+          if [ "$version" != "$tag_version" ]; then
+            echo "Cargo.toml version $version does not match release tag $RELEASE_TAG" >&2
+            exit 1
+          fi
+
+      - name: Install Linux build dependencies
+        shell: bash
+        timeout-minutes: 15
+        run: bash scripts/install_linux_build_deps.sh
+
+      - name: Build artifacts on Linux
+        shell: bash
+        timeout-minutes: 45
+        run: bash scripts/build_binaries_linux.sh --locked --no-update
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: v_fs_backup-${{ matrix.name }}
+          path: versions/v_fs_backup_v*/v_fs_backup_v*
+          if-no-files-found: error
+
+  build-native:
+    name: Build ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macos-x86_64
+            runner: macos-15-intel
+            shell: bash
+            command: bash scripts/build_binaries_macos.sh --locked --no-update
+          - name: macos-arm64
+            runner: macos-15
+            shell: bash
+            command: bash scripts/build_binaries_macos.sh --locked --no-update
+          - name: windows-x86_64
+            runner: windows-2025
+            shell: pwsh
+            command: .\scripts\build_binaries_windows.ps1 -Locked -NoUpdate
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
 
       - name: Install Rust
+        shell: bash
+        timeout-minutes: 10
         run: |
-          if ! command -v cargo >/dev/null 2>&1; then
-            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
-            echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
-          fi
           rustup toolchain install stable --profile minimal
           rustup default stable
 
-      - name: Build release artifacts
-        run: ./scripts/build_binaries_macos.sh --locked
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2.9.2
+        with:
+          shared-key: release-${{ matrix.name }}
 
-      - name: Upload release artifacts
+      - name: Check tag matches Cargo version
+        shell: bash
         env:
-          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }}
         run: |
-          find versions -maxdepth 2 -type f -name 'v_fs_backup_v*' -print0 |
-            while IFS= read -r -d '' artifact; do
-              gh release upload "$RELEASE_TAG" "$artifact" --clobber
-            done
+          version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | sed -n '1p')
+          tag_version="${RELEASE_TAG#v}"
+          if [ "$version" != "$tag_version" ]; then
+            echo "Cargo.toml version $version does not match release tag $RELEASE_TAG" >&2
+            exit 1
+          fi
 
-  windows:
-    name: Windows x86_64
-    runs-on: windows-latest
-    env:
-      V_FS_BACKUP_CODESIGN_PFX_BASE64: ${{ secrets.V_FS_BACKUP_CODESIGN_PFX_BASE64 }}
-      V_FS_BACKUP_CODESIGN_PASSWORD: ${{ secrets.V_FS_BACKUP_CODESIGN_PASSWORD }}
-      V_FS_BACKUP_CODESIGN_THUMBPRINT: ${{ secrets.V_FS_BACKUP_CODESIGN_THUMBPRINT }}
-      V_FS_BACKUP_CODESIGN_TIMESTAMP_URL: ${{ secrets.V_FS_BACKUP_CODESIGN_TIMESTAMP_URL }}
+      - name: Install Windows package tools
+        if: matrix.shell == 'pwsh'
+        shell: pwsh
+        timeout-minutes: 15
+        run: |
+          if (-not (Get-Command wix.exe -ErrorAction SilentlyContinue)) {
+            dotnet tool install --global wix
+          }
+          "$env:USERPROFILE\.dotnet\tools" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+
+          if (-not (Get-Command ISCC.exe -ErrorAction SilentlyContinue)) {
+            choco install innosetup --no-progress -y
+          }
+
+      - name: Prepare Windows code signing certificate
+        if: matrix.shell == 'pwsh'
+        shell: pwsh
+        timeout-minutes: 2
+        env:
+          V_FS_BACKUP_CODESIGN_PFX_BASE64: ${{ secrets.V_FS_BACKUP_CODESIGN_PFX_BASE64 }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:V_FS_BACKUP_CODESIGN_PFX_BASE64)) {
+            Write-Host "No Windows code signing PFX secret configured."
+            exit 0
+          }
+
+          $certPath = Join-Path $env:RUNNER_TEMP "v_fs_backup_codesign.pfx"
+          [IO.File]::WriteAllBytes($certPath, [Convert]::FromBase64String($env:V_FS_BACKUP_CODESIGN_PFX_BASE64))
+          "V_FS_BACKUP_CODESIGN_PFX=$certPath" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Build artifacts on Unix
+        if: matrix.shell == 'bash'
+        shell: bash
+        timeout-minutes: 45
+        run: ${{ matrix.command }}
+
+      - name: Build artifacts on Windows
+        if: matrix.shell == 'pwsh'
+        shell: pwsh
+        timeout-minutes: 45
+        env:
+          V_FS_BACKUP_CODESIGN_PASSWORD: ${{ secrets.V_FS_BACKUP_CODESIGN_PASSWORD }}
+          V_FS_BACKUP_CODESIGN_THUMBPRINT: ${{ secrets.V_FS_BACKUP_CODESIGN_THUMBPRINT }}
+          V_FS_BACKUP_CODESIGN_TIMESTAMP_URL: ${{ secrets.V_FS_BACKUP_CODESIGN_TIMESTAMP_URL }}
+        run: ${{ matrix.command }}
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: v_fs_backup-${{ matrix.name }}
+          path: versions/v_fs_backup_v*/v_fs_backup_v*
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub Release
+    needs:
+      - build-linux
+      - build-native
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
+      - name: Download build artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: release-assets
+          merge-multiple: true
 
-      - name: Build release artifacts
-        shell: pwsh
+      - name: Prepare release assets
+        shell: bash
         run: |
-          $arguments = @("-Locked")
-          if (-not [string]::IsNullOrWhiteSpace($env:V_FS_BACKUP_CODESIGN_PFX_BASE64) -and -not [string]::IsNullOrWhiteSpace($env:V_FS_BACKUP_CODESIGN_PASSWORD)) {
-            $pfxPath = Join-Path $env:RUNNER_TEMP "v_fs_backup_codesign.pfx"
-            [IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String($env:V_FS_BACKUP_CODESIGN_PFX_BASE64))
-            $env:V_FS_BACKUP_CODESIGN_PFX = $pfxPath
-          }
-          elseif ([string]::IsNullOrWhiteSpace($env:V_FS_BACKUP_CODESIGN_THUMBPRINT)) {
-            $arguments += "-SkipCodeSigning"
-          }
+          mkdir -p release-assets-flat
+          find release-assets -type f -name 'v_fs_backup_v*' -exec cp -f {} release-assets-flat/ \;
 
-          & .\scripts\build_binaries_windows.ps1 @arguments
+          asset_count=$(find release-assets-flat -maxdepth 1 -type f | wc -l)
+          if [ "$asset_count" -eq 0 ]; then
+            echo "No release assets found under release-assets" >&2
+            find release-assets -maxdepth 4 -print >&2
+            exit 1
+          fi
 
-      - name: Upload release artifacts
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          Get-ChildItem -Path "versions\v_fs_backup_v*" -File |
-            Where-Object { $_.Name -like "v_fs_backup_v*" } |
-            ForEach-Object {
-              gh release upload $env:RELEASE_TAG $_.FullName --clobber
-            }
+          find release-assets-flat -maxdepth 1 -type f -printf '%f\n' | sort
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }}
+          name: v_fs_backup ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }}
+          generate_release_notes: true
+          files: release-assets-flat/*
+          fail_on_unmatched_files: true
