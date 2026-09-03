@@ -37,25 +37,68 @@ fn is_raw_binary_asset(asset_name: &str) -> bool {
 }
 
 fn install_windows_asset(path: &Path, asset_name: &str) -> Result<String> {
-    if asset_name.ends_with(".exe") {
-        Command::new(path)
-            .spawn()
-            .with_context(|| format!("failed to start Windows installer '{}'", path.display()))?;
-        return Ok("Started the Windows EXE installer. Complete it to finish updating.".to_owned());
-    }
-
-    if asset_name.ends_with(".msi") {
-        Command::new("msiexec")
-            .arg("/i")
-            .arg(path)
-            .spawn()
-            .with_context(|| format!("failed to start msiexec for '{}'", path.display()))?;
-        return Ok("Started msiexec. Complete it to finish updating.".to_owned());
+    if asset_name.ends_with(".exe") && asset_name.starts_with(APP_NAME) {
+        return stage_windows_binary_update(path);
     }
 
     Err(simple_error(v_concat!(
-        "downloaded {asset_name}, but Windows updates require the .exe or .msi installer asset"
+        "downloaded {asset_name}, but Windows updates require the .exe binary asset"
     )))
+}
+
+fn stage_windows_binary_update(new_binary: &Path) -> Result<String> {
+    let current = env::current_exe().context("failed to resolve current executable path")?;
+    let parent = current
+        .parent()
+        .ok_or_else(|| simple_error("failed to resolve current executable parent directory"))?;
+    let staged = parent.join(v_concat!(".{APP_NAME}_update_{}.exe", std::process::id()));
+
+    fs::copy(new_binary, &staged).with_context(|| {
+        format!(
+            "failed to stage Windows update binary from '{}' to '{}'",
+            new_binary.display(),
+            staged.display()
+        )
+    })?;
+
+    let script = r#"
+$ErrorActionPreference = 'Stop'
+$source = $env:V_FS_BACKUP_UPDATE_SOURCE
+$target = $env:V_FS_BACKUP_UPDATE_TARGET
+$pidToWait = [int]$env:V_FS_BACKUP_UPDATE_PID
+try {
+    Wait-Process -Id $pidToWait -Timeout 120 -ErrorAction SilentlyContinue
+}
+catch {}
+Start-Sleep -Milliseconds 300
+Copy-Item -LiteralPath $source -Destination $target -Force
+Remove-Item -LiteralPath $source -Force -ErrorAction SilentlyContinue
+"#;
+
+    Command::new("powershell.exe")
+        .args([
+            "-NoLogo",
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-WindowStyle",
+            "Hidden",
+            "-Command",
+            script,
+        ])
+        .env("V_FS_BACKUP_UPDATE_SOURCE", &staged)
+        .env("V_FS_BACKUP_UPDATE_TARGET", &current)
+        .env("V_FS_BACKUP_UPDATE_PID", std::process::id().to_string())
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .with_context(|| "failed to start background Windows binary updater".to_owned())?;
+
+    Ok(
+        "Staged the Windows binary update. Close and open v_fs_backup again to apply it."
+            .to_owned(),
+    )
 }
 
 fn install_deb(path: &Path) -> Result<String> {

@@ -144,7 +144,7 @@ because zstd cannot provide a reliable remaining-work count for that phase.
 
 ## Updates
 
-Use `--check-update` and `--update` to pull updates. The update checks the release source and installs the latest matching binary from `https://github.com/juanchoraf/v_fs_backup` over the current installation when a newer release is available.
+Use `--check-update` and `--update` to pull updates. The update checks the release source and installs the latest matching binary from `https://github.com/juanchoraf/v_fs_backup` over the current executable when a newer release is available. Releases provide direct OS binaries; no install or uninstall scripts are required.
 
 ## Credits
 

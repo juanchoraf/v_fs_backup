@@ -10,7 +10,7 @@ use v_concat::v_concat;
 mod install;
 mod json;
 
-use self::install::{command_available, install_downloaded_asset, run_command};
+use self::install::{install_downloaded_asset, run_command};
 use self::json::{json_string_field, parse_assets};
 
 const APP_NAME: &str = "v_fs_backup";
@@ -156,31 +156,12 @@ fn compatible_asset_names(version: &str) -> Vec<String> {
     match env::consts::OS {
         "windows" => {
             push_artifact(&mut names, &versioned_name, "windows", &arch, "exe");
-            push_artifact(&mut names, &versioned_name, "windows", &arch, "msi");
-            push_artifact(&mut names, &versioned_name, "windows", &arch, "zip");
         }
-        "macos" => {
-            push_artifact(&mut names, &versioned_name, "macos", &arch, "pkg");
-            push_artifact(&mut names, &versioned_name, "macos", &arch, "");
-            push_artifact(&mut names, &versioned_name, "macos", &arch, "tar.gz");
-            push_artifact(&mut names, &versioned_name, "macos", &arch, "zip");
-        }
+        "macos" => push_artifact(&mut names, &versioned_name, "macos", &arch, ""),
         "linux" => {
-            if is_debian_like() {
-                push_artifact(&mut names, &versioned_name, "linux", &arch, "deb");
-            }
             push_artifact(&mut names, &versioned_name, "linux", &arch, "");
-            push_artifact(&mut names, &versioned_name, "linux", &arch, "tar.gz");
-            push_artifact(&mut names, &versioned_name, "linux", &arch, "zip");
         }
-        other_unix => {
-            push_artifact(&mut names, &versioned_name, other_unix, &arch, "");
-            push_artifact(&mut names, &versioned_name, other_unix, &arch, "tar.gz");
-            push_artifact(&mut names, &versioned_name, other_unix, &arch, "zip");
-            push_artifact(&mut names, &versioned_name, "unix", &arch, "");
-            push_artifact(&mut names, &versioned_name, "unix", &arch, "tar.gz");
-            push_artifact(&mut names, &versioned_name, "unix", &arch, "zip");
-        }
+        other_unix => push_artifact(&mut names, &versioned_name, other_unix, &arch, ""),
     }
 
     names
@@ -200,18 +181,6 @@ fn normalized_arch() -> String {
         "x86_64" => "x86_64".to_owned(),
         other => other.to_owned(),
     }
-}
-
-fn is_debian_like() -> bool {
-    if command_available("apt") || command_available("apt-get") || command_available("dpkg") {
-        return true;
-    }
-
-    let Ok(os_release) = fs::read_to_string("/etc/os-release") else {
-        return false;
-    };
-    let lower = os_release.to_ascii_lowercase();
-    lower.contains("id=debian") || lower.contains("id=ubuntu") || lower.contains("id_like=debian")
 }
 
 fn select_asset<'a>(assets: &'a [GitHubAsset], candidates: &[String]) -> Option<&'a GitHubAsset> {
