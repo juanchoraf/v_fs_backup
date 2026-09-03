@@ -209,7 +209,7 @@ checksum = "9e6e487237df18fea3317b41c345f2491704ffb1101d0b2cc99cf00de74bc292"
 
 [[package]]
 name = "v_fs_backup"
-version = "0.1.9"
+version = "0.1.10"
 dependencies = [
  "libc",
  "rustyline",
