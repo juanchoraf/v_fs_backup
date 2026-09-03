@@ -144,10 +144,7 @@ because zstd cannot provide a reliable remaining-work count for that phase.
 
 ## Updates
 
-`v_fs_backup` is GUI-only. The bottom-right controls show the installed
-version and an Update button. Update checks the release source and installs the
-latest matching binary from `https://github.com/juanchoraf/v_fs_backup` over
-the current installation when a newer release is available.
+Use `--check-update` and `--update` to pull updates. The update checks the release source and installs the latest matching binary from `https://github.com/juanchoraf/v_fs_backup` over the current installation when a newer release is available.
 
 ## Credits
 
