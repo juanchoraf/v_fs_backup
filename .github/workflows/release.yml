@@ -1,0 +1,119 @@
+name: Release
+
+on:
+  release:
+    types:
+      - published
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to upload artifacts to
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+
+jobs:
+  linux:
+    name: Linux x86_64
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install build prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y zip
+          if ! command -v cargo >/dev/null 2>&1; then
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
+            echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          fi
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+
+      - name: Build release artifacts
+        run: ./scripts/build_binaries_linux.sh --locked
+
+      - name: Upload release artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          find versions -maxdepth 2 -type f -name 'v_fs_backup_v*' -print0 |
+            while IFS= read -r -d '' artifact; do
+              gh release upload "$RELEASE_TAG" "$artifact" --clobber
+            done
+
+  macos:
+    name: macOS ${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-13
+            arch: x86_64
+          - runner: macos-14
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Rust
+        run: |
+          if ! command -v cargo >/dev/null 2>&1; then
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
+            echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          fi
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+
+      - name: Build release artifacts
+        run: ./scripts/build_binaries_macos.sh --locked
+
+      - name: Upload release artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          find versions -maxdepth 2 -type f -name 'v_fs_backup_v*' -print0 |
+            while IFS= read -r -d '' artifact; do
+              gh release upload "$RELEASE_TAG" "$artifact" --clobber
+            done
+
+  windows:
+    name: Windows x86_64
+    runs-on: windows-latest
+    env:
+      V_FS_BACKUP_CODESIGN_PFX_BASE64: ${{ secrets.V_FS_BACKUP_CODESIGN_PFX_BASE64 }}
+      V_FS_BACKUP_CODESIGN_PASSWORD: ${{ secrets.V_FS_BACKUP_CODESIGN_PASSWORD }}
+      V_FS_BACKUP_CODESIGN_THUMBPRINT: ${{ secrets.V_FS_BACKUP_CODESIGN_THUMBPRINT }}
+      V_FS_BACKUP_CODESIGN_TIMESTAMP_URL: ${{ secrets.V_FS_BACKUP_CODESIGN_TIMESTAMP_URL }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build release artifacts
+        shell: pwsh
+        run: |
+          $arguments = @("-Locked")
+          if (-not [string]::IsNullOrWhiteSpace($env:V_FS_BACKUP_CODESIGN_PFX_BASE64) -and -not [string]::IsNullOrWhiteSpace($env:V_FS_BACKUP_CODESIGN_PASSWORD)) {
+            $pfxPath = Join-Path $env:RUNNER_TEMP "v_fs_backup_codesign.pfx"
+            [IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String($env:V_FS_BACKUP_CODESIGN_PFX_BASE64))
+            $env:V_FS_BACKUP_CODESIGN_PFX = $pfxPath
+          }
+          elseif ([string]::IsNullOrWhiteSpace($env:V_FS_BACKUP_CODESIGN_THUMBPRINT)) {
+            $arguments += "-SkipCodeSigning"
+          }
+
+          & .\scripts\build_binaries_windows.ps1 @arguments
+
+      - name: Upload release artifacts
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          Get-ChildItem -Path "versions\v_fs_backup_v*" -File |
+            Where-Object { $_.Name -like "v_fs_backup_v*" } |
+            ForEach-Object {
+              gh release upload $env:RELEASE_TAG $_.FullName --clobber
+            }
