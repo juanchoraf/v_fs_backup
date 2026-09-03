@@ -76,8 +76,8 @@ v_fs_backup> clear
 v_fs_backup> exit
 ```
 
-On Windows, the Start menu shortcut opens the console in PowerShell so ANSI
-colors are visible.
+On Windows, the app enables ANSI colors in the console and the installed
+shortcut uses the embedded app icon.
 
 ## Command-Line Examples
 

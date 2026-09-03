@@ -10,7 +10,7 @@ use v_concat::v_concat;
 mod install;
 mod json;
 
-use self::install::{install_downloaded_asset, is_debian_like, run_command};
+use self::install::{install_downloaded_asset, is_debian_like};
 use self::json::{json_string_field, parse_assets};
 
 const APP_NAME: &str = "v_fs_backup";
@@ -343,7 +343,7 @@ fn download_file(url: &str, path: &Path) -> Result<()> {
 
     #[cfg(not(windows))]
     {
-        if run_command(
+        if install::run_command(
             Command::new("curl").arg("-fL").arg("-o").arg(path).arg(url),
             "download release asset",
         )
@@ -352,7 +352,7 @@ fn download_file(url: &str, path: &Path) -> Result<()> {
             return Ok(());
         }
 
-        run_command(
+        install::run_command(
             Command::new("fetch").arg("-o").arg(path).arg(url),
             "download release asset",
         )

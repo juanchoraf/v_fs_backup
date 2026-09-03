@@ -364,8 +364,6 @@ function Build-Msi {
     $appNameAttr = ConvertTo-WixAttribute $AppName
     $publisherAttr = ConvertTo-WixAttribute $Publisher
     $upgradeCodeAttr = ConvertTo-WixAttribute $MsiUpgradeCode
-    $shortcutTarget = ConvertTo-WixAttribute "[System64Folder]WindowsPowerShell\v1.0\powershell.exe"
-    $shortcutArgs = ConvertTo-WixAttribute "-NoLogo -NoExit -NoProfile -ExecutionPolicy Bypass -Command ""& '[#AppExeFile]'"""
     @"
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
   <Package Name="$appNameAttr" Manufacturer="$publisherAttr" Version="$msiVersion" UpgradeCode="$upgradeCodeAttr" Scope="perMachine">
@@ -385,7 +383,7 @@ function Build-Msi {
       <Component Id="ReadmeDoc" Directory="DocsFolder" Guid="{40790F68-D7D7-4F4C-8CFB-F62D568EE6CB}"><File Id="ReadmeFile" Source="$readme" Name="README.md" KeyPath="yes" /></Component>
       <Component Id="LogoAsset" Directory="AssetsFolder" Guid="{7572B153-0F2D-4FD9-8F95-3E44E41FF127}"><File Id="LogoFile" Source="$logo" Name="$AppName-logo.png" KeyPath="yes" /></Component>
       <Component Id="IconAsset" Directory="AssetsFolder" Guid="{1B695B18-BCE4-4885-90B4-56D22EA30F9E}"><File Id="IconFile" Source="$icon" Name="$AppName.ico" KeyPath="yes" /></Component>
-      <Component Id="StartMenuShortcut" Directory="ApplicationProgramsFolder" Guid="{A3B57A53-D42B-407B-A21B-71C2CB3837E9}"><Shortcut Id="StartMenuShortcut" Name="$appNameAttr" Description="Open $appNameAttr" Target="$shortcutTarget" Arguments="$shortcutArgs" WorkingDirectory="BinFolder" Icon="AppIcon" IconIndex="0" /><RemoveFolder Id="RemoveStartMenuFolder" On="uninstall" /><RegistryValue Root="HKLM" Key="Software\$publisherAttr\$appNameAttr" Name="installed" Type="integer" Value="1" KeyPath="yes" /></Component>
+      <Component Id="StartMenuShortcut" Directory="ApplicationProgramsFolder" Guid="{A3B57A53-D42B-407B-A21B-71C2CB3837E9}"><Shortcut Id="StartMenuShortcut" Name="$appNameAttr" Description="Open $appNameAttr" Target="[#AppExeFile]" WorkingDirectory="BinFolder" Icon="AppIcon" IconIndex="0" /><RemoveFolder Id="RemoveStartMenuFolder" On="uninstall" /><RegistryValue Root="HKLM" Key="Software\$publisherAttr\$appNameAttr" Name="installed" Type="integer" Value="1" KeyPath="yes" /></Component>
       <Component Id="FsbFileAssociation" Directory="INSTALLFOLDER" Guid="{3612D12C-B355-4C09-A212-FF1658996FDE}"><RegistryValue Root="HKCR" Key=".fsb" Name="" Type="string" Value="TheVelasquez.v_fs_backup.fsb" KeyPath="yes" /><RegistryValue Root="HKCR" Key="TheVelasquez.v_fs_backup.fsb" Name="" Type="string" Value="v_fs_backup archive" /><RegistryValue Root="HKCR" Key="TheVelasquez.v_fs_backup.fsb\DefaultIcon" Name="" Type="string" Value="[AssetsFolder]$AppName.ico" /></Component>
     </ComponentGroup>
   </Fragment>
@@ -394,8 +392,11 @@ function Build-Msi {
     Push-Location $OutDir
     try {
         $wixArgs = @("build") + (Get-WixAcceptArgs) + @("$ArtifactBaseName.wxs", "-arch", "x64", "-out", "$ArtifactBaseName.msi")
-        & wix @wixArgs
-        if ($LASTEXITCODE -ne 0) { throw "wix build failed with exit code $LASTEXITCODE" }
+        $output = & wix @wixArgs 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            if ($output) { $output | ForEach-Object { Write-Warning $_ } }
+            throw "wix build failed with exit code $LASTEXITCODE"
+        }
     } finally {
         Pop-Location
     }
