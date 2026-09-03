@@ -16,46 +16,38 @@ Archives use a zstd-compressed stream. Repeated files and build trees can
 compress very well. Photos, videos, ZIP files, encrypted files, and other data
 that is already compressed may not become much smaller.
 
-## Install From Release Binary
+## Install From Release Packages
 
-Download the matching binary from GitHub Releases. Versioned release binaries
-install themselves when opened with no arguments. You can also install
-explicitly:
+Download the matching artifact from GitHub Releases. Users install packages or
+run the portable binary; the app itself does not run install/uninstall scripts.
 
 ```bash
-# Linux
-chmod +x ./v_fs_backup_vVERSION_linux_x86_64
-sudo ./v_fs_backup_vVERSION_linux_x86_64 --install
+# Debian/Ubuntu
+sudo apt install ./v_fs_backup_vVERSION_linux_x86_64.deb
 
 # macOS
-chmod +x ./v_fs_backup_vVERSION_macos_arm64
-sudo ./v_fs_backup_vVERSION_macos_arm64 --install
+sudo installer -pkg ./v_fs_backup_vVERSION_macos_arm64.pkg -target /
 ```
 
-On Windows, run the downloaded `.exe` or install explicitly from PowerShell:
+On Windows, run the `.msi` or `.exe` installer from the release. The installed
+app is available from a new terminal as `v_fs_backup`.
 
-```powershell
-.\v_fs_backup_vVERSION_windows_x86_64.exe --install
-```
+Linux `.deb` packages install `/usr/local/bin/v_fs_backup`, desktop launcher
+metadata, app icons, and the `.fsb` MIME icon. macOS `.pkg` packages install
+`/usr/local/bin/v_fs_backup` and `/Applications/v_fs_backup.app`. Windows
+packages install into Program Files, add a Start menu shortcut, register PATH,
+and register the `.fsb` icon.
 
-The Windows installer requests Administrator privileges through UAC when
-needed. The installed app is available from a new terminal as `v_fs_backup`.
-Linux installs `/usr/local/bin/v_fs_backup`, desktop launcher metadata, app
-icons, and the `.fsb` MIME icon. macOS installs `/usr/local/bin/v_fs_backup`
-and `/Applications/v_fs_backup.app`. Windows installs into Program Files,
-adds a Start menu shortcut, registers PATH, and registers the `.fsb` icon.
+Use the OS package manager to uninstall: `apt remove v-fs-backup` on
+Debian/Ubuntu, the installed package receipt on macOS, or Apps and Features on
+Windows.
 
-Remove the installed app and OS registrations with:
+Portable `.tar.gz`/`.zip` releases include the binary, README, and logo assets
+for systems where a native installer is not available.
 
-```bash
-v_fs_backup --uninstall
-```
+## Build Release Artifacts
 
-No install or uninstall scripts are required.
-
-## Build Release Binaries
-
-Build scripts create direct, self-installing 64-bit binaries under
+Build scripts create 64-bit binaries and installer artifacts under
 `versions/v_fs_backup_vVERSION/`:
 
 ```bash
@@ -194,7 +186,7 @@ because zstd cannot provide a reliable remaining-work count for that phase.
 
 ## Updates
 
-Use `--check-update` and `--update` to pull updates. The update checks the release source and installs the latest matching binary from `https://github.com/juanchoraf/v_fs_backup` over the current executable when a newer release is available. Releases provide direct OS binaries; no install or uninstall scripts are required.
+Use `--check-update` and `--update` to pull updates. The update checks the release source and installs the latest matching package or portable archive from `https://github.com/juanchoraf/v_fs_backup` when a newer release is available.
 
 ## Credits
 

@@ -2,13 +2,6 @@ pub fn run_from_env() -> Result<()> {
     initialize_terminal();
     let args: Vec<OsString> = env::args_os().collect();
     if args.len() == 1 {
-        if installer::should_auto_install_current_executable()? {
-            print_padded_stdout(installer::install_current_executable()?);
-            return Ok(());
-        }
-        if relaunch_interactive_in_powershell()? {
-            return Ok(());
-        }
         return run_interactive_shell();
     }
 
@@ -27,14 +20,6 @@ fn run_parsed_command(command: ParsedCommand) -> Result<()> {
         }
         ParsedCommand::Update => {
             print_padded_stdout(updater::install_update()?);
-            Ok(())
-        }
-        ParsedCommand::Install => {
-            print_padded_stdout(installer::install_current_executable()?);
-            Ok(())
-        }
-        ParsedCommand::Uninstall => {
-            print_padded_stdout(installer::uninstall_current_installation()?);
             Ok(())
         }
     }

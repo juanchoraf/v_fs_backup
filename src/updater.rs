@@ -10,7 +10,7 @@ use v_concat::v_concat;
 mod install;
 mod json;
 
-use self::install::{install_downloaded_asset, run_command};
+use self::install::{install_downloaded_asset, is_debian_like, run_command};
 use self::json::{json_string_field, parse_assets};
 
 const APP_NAME: &str = "v_fs_backup";
@@ -155,13 +155,31 @@ fn compatible_asset_names(version: &str) -> Vec<String> {
 
     match env::consts::OS {
         "windows" => {
+            push_artifact(&mut names, &versioned_name, "windows", &arch, "msi");
             push_artifact(&mut names, &versioned_name, "windows", &arch, "exe");
+            push_artifact(&mut names, &versioned_name, "windows", &arch, "zip");
         }
-        "macos" => push_artifact(&mut names, &versioned_name, "macos", &arch, ""),
+        "macos" => {
+            push_artifact(&mut names, &versioned_name, "macos", &arch, "pkg");
+            push_artifact(&mut names, &versioned_name, "macos", &arch, "tar.gz");
+            push_artifact(&mut names, &versioned_name, "macos", &arch, "zip");
+            push_artifact(&mut names, &versioned_name, "macos", &arch, "");
+        }
         "linux" => {
+            if is_debian_like() {
+                push_artifact(&mut names, &versioned_name, "linux", &arch, "deb");
+            }
+            push_artifact(&mut names, &versioned_name, "linux", &arch, "tar.gz");
+            push_artifact(&mut names, &versioned_name, "linux", &arch, "zip");
             push_artifact(&mut names, &versioned_name, "linux", &arch, "");
         }
-        other_unix => push_artifact(&mut names, &versioned_name, other_unix, &arch, ""),
+        other_unix => {
+            push_artifact(&mut names, &versioned_name, other_unix, &arch, "tar.gz");
+            push_artifact(&mut names, &versioned_name, other_unix, &arch, "zip");
+            push_artifact(&mut names, &versioned_name, "unix", &arch, "tar.gz");
+            push_artifact(&mut names, &versioned_name, "unix", &arch, "zip");
+            push_artifact(&mut names, &versioned_name, other_unix, &arch, "");
+        }
     }
 
     names
@@ -190,7 +208,16 @@ fn select_asset<'a>(assets: &'a [GitHubAsset], candidates: &[String]) -> Option<
 }
 
 fn checksum_name_for(asset_name: &str) -> String {
-    v_concat!("{asset_name}.sha256")
+    let base = asset_name
+        .strip_suffix(".tar.gz")
+        .or_else(|| asset_name.strip_suffix(".zip"))
+        .or_else(|| asset_name.strip_suffix(".deb"))
+        .or_else(|| asset_name.strip_suffix(".pkg"))
+        .or_else(|| asset_name.strip_suffix(".exe"))
+        .or_else(|| asset_name.strip_suffix(".msi"))
+        .unwrap_or(asset_name);
+
+    v_concat!("{base}.sha256")
 }
 
 fn verify_download_checksum(
@@ -433,12 +460,12 @@ mod tests {
     #[test]
     fn checksum_names_match_binary_assets() {
         assert_eq!(
-            checksum_name_for("v_fs_backup_v1.2.3_linux_x86_64"),
+            checksum_name_for("v_fs_backup_v1.2.3_linux_x86_64.tar.gz"),
             "v_fs_backup_v1.2.3_linux_x86_64.sha256"
         );
         assert_eq!(
-            checksum_name_for("v_fs_backup_v1.2.3_windows_x86_64.exe"),
-            "v_fs_backup_v1.2.3_windows_x86_64.exe.sha256"
+            checksum_name_for("v_fs_backup_v1.2.3_windows_x86_64.msi"),
+            "v_fs_backup_v1.2.3_windows_x86_64.sha256"
         );
     }
 

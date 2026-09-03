@@ -22,8 +22,6 @@ include!("runtime.rs");
 include!("windows_terminal.rs");
 include!("core.rs");
 
-mod installer;
-
 include!("types.rs");
 include!("completion.rs");
 include!("archive_types.rs");

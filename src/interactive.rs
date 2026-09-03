@@ -92,7 +92,7 @@ const BANNER_WORDMARK: &str = r#"
 fn print_interactive_banner() {
     print_padded_stdout(v_concat!(
         "{ANSI_CYAN}{BANNER_COMPRESSION_INPUT}{ANSI_YELLOW}{BANNER_COMPRESSION_OUTPUT}{ANSI_BLUE}{BANNER_WORDMARK}{ANSI_RESET}\
-v_fs_backup: fast compressed filesystem backups. Type help, compress, decompress, install, update, clear, or exit."
+ v_fs_backup: fast compressed filesystem backups. Type help, compress, decompress, update, clear, or exit."
     ));
 }
 
@@ -108,8 +108,6 @@ fn interactive_args_from_line(line: &str) -> Result<Vec<OsString>> {
         "version" => args.push(OsString::from("--version")),
         "check-update" => args.push(OsString::from("--check-update")),
         "update" => args.push(OsString::from("--update")),
-        "install" => args.push(OsString::from("--install")),
-        "uninstall" => args.push(OsString::from("--uninstall")),
         "compress" if words.len() == 3 => {
             args.push(OsString::from("--dir"));
             args.push(OsString::from(&words[1]));

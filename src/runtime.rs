@@ -79,24 +79,3 @@ fn initialize_terminal() {
         }
     }
 }
-
-fn relaunch_interactive_in_powershell() -> Result<bool> {
-    #[cfg(windows)]
-    {
-        if env::var_os("V_FS_BACKUP_INSIDE_POWERSHELL").is_some()
-            || windows_terminal::parent_is_powershell()
-        {
-            return Ok(false);
-        }
-
-        let executable =
-            env::current_exe().context("failed to locate the current v_fs_backup executable")?;
-        return windows_terminal::launch_in_powershell(&executable)
-            .map_err(|error| simple_error(format!("failed to open PowerShell: {error}")));
-    }
-
-    #[cfg(not(windows))]
-    {
-        Ok(false)
-    }
-}

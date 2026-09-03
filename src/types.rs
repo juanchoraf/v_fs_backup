@@ -34,16 +34,12 @@ enum ParsedCommand {
     Run(Cli),
     CheckUpdate,
     Update,
-    Install,
-    Uninstall,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ControlMode {
     CheckUpdate,
     Update,
-    InstallApp,
-    UninstallApp,
 }
 
 #[derive(Debug, Clone)]

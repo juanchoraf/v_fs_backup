@@ -29,12 +29,7 @@ impl Cli {
     pub fn try_parse_from(args: impl IntoIterator<Item = OsString>) -> Result<Option<Self>> {
         match parse_command_from(args)? {
             Some(ParsedCommand::Run(cli)) => Ok(Some(cli)),
-            Some(
-                ParsedCommand::CheckUpdate
-                | ParsedCommand::Update
-                | ParsedCommand::Install
-                | ParsedCommand::Uninstall,
-            ) => {
+            Some(ParsedCommand::CheckUpdate | ParsedCommand::Update) => {
                 bail!("control commands do not produce backup arguments")
             }
             None => Ok(None),
@@ -95,17 +90,6 @@ fn parse_command_from(args: impl IntoIterator<Item = OsString>) -> Result<Option
             idx += 1;
             continue;
         }
-        if text == "--install" {
-            set_control_mode(&mut control_mode, ControlMode::InstallApp)?;
-            idx += 1;
-            continue;
-        }
-        if text == "--uninstall" {
-            set_control_mode(&mut control_mode, ControlMode::UninstallApp)?;
-            idx += 1;
-            continue;
-        }
-
         if text == "--overwrite" {
             cli.overwrite = true;
             idx += 1;
@@ -139,15 +123,13 @@ fn parse_command_from(args: impl IntoIterator<Item = OsString>) -> Result<Option
         }
 
         if let Some((flag, value)) = text.split_once('=') {
-            if ["--check-update", "--update", "--install", "--uninstall"].contains(&flag) {
+            if ["--check-update", "--update"].contains(&flag) {
                 if !value.is_empty() {
                     bail!("{flag} does not take a value");
                 }
                 let mode = match flag {
                     "--check-update" => ControlMode::CheckUpdate,
                     "--update" => ControlMode::Update,
-                    "--install" => ControlMode::InstallApp,
-                    "--uninstall" => ControlMode::UninstallApp,
                     _ => unreachable!(),
                 };
                 set_control_mode(&mut control_mode, mode)?;
@@ -171,8 +153,6 @@ fn parse_command_from(args: impl IntoIterator<Item = OsString>) -> Result<Option
         return Ok(Some(match control_mode {
             ControlMode::CheckUpdate => ParsedCommand::CheckUpdate,
             ControlMode::Update => ParsedCommand::Update,
-            ControlMode::InstallApp => ParsedCommand::Install,
-            ControlMode::UninstallApp => ParsedCommand::Uninstall,
         }));
     }
 
@@ -276,6 +256,6 @@ fn is_value_flag(text: &str) -> bool {
 fn print_help() {
     let version = env!("CARGO_PKG_VERSION");
     print_padded_stdout(v_concat!(
-        "v_fs_backup {version}\n\nFast, compressed, metadata-preserving filesystem backups.\n\nUSAGE:\n  v_fs_backup [OPTIONS] [SEARCH_ROOT ...] --to <ARCHIVE_OR_DIRECTORY>\n  v_fs_backup --restore <ARCHIVE> --to <RESTORE_DIRECTORY>\n  v_fs_backup --install\n  v_fs_backup --uninstall\n  v_fs_backup --check-update\n  v_fs_backup --update\n\nOPTIONS:\n  --file <PATH_OR_NAME>             Back up a matching file\n  --dir <PATH_OR_NAME>              Back up a matching directory\n  --regex, --rx <REGEX>             Back up paths matching a regex\n  --exclude-file, --ef <PATH>       Exclude a file\n  --exclude-dir, --ed <PATH>        Exclude a directory tree\n  --exclude-regex, --er <REGEX>     Exclude paths matching a regex\n  -n, --no-recursive                Do not recurse into subdirectories\n  --to <PATH>                       Archive path for backups or restore directory\n  --restore <ARCHIVE>               Restore a v_fs_backup archive\n  --compression-level <0..22>       zstd compression level, default 6\n  --jobs <N>                        Hashing worker count\n  --overwrite                       Replace an existing archive or restore target\n  --quiet                           Suppress progress output\n  --install                         Install this binary for all users\n  --uninstall                       Remove the installed app and OS registrations\n  --check-update                    Check GitHub for a newer release\n  --update                          Install the latest matching GitHub release\n  -h, --help                        Show this help\n  -V, --version                     Show version\n\nRunning a versioned release binary with no arguments starts installation automatically.\nUpdates are pulled from https://github.com/juanchoraf/v_fs_backup/releases/latest.\nCompatibility aliases accepted before parsing: -nr, -rx, -ef, -ed, -er, --compresion-level."
+        "v_fs_backup {version}\n\nFast, compressed, metadata-preserving filesystem backups.\n\nUSAGE:\n  v_fs_backup [OPTIONS] [SEARCH_ROOT ...] --to <ARCHIVE_OR_DIRECTORY>\n  v_fs_backup --restore <ARCHIVE> --to <RESTORE_DIRECTORY>\n  v_fs_backup --check-update\n  v_fs_backup --update\n\nOPTIONS:\n  --file <PATH_OR_NAME>             Back up a matching file\n  --dir <PATH_OR_NAME>              Back up a matching directory\n  --regex, --rx <REGEX>             Back up paths matching a regex\n  --exclude-file, --ef <PATH>       Exclude a file\n  --exclude-dir, --ed <PATH>        Exclude a directory tree\n  --exclude-regex, --er <REGEX>     Exclude paths matching a regex\n  -n, --no-recursive                Do not recurse into subdirectories\n  --to <PATH>                       Archive path for backups or restore directory\n  --restore <ARCHIVE>               Restore a v_fs_backup archive\n  --compression-level <0..22>       zstd compression level, default 6\n  --jobs <N>                        Hashing worker count\n  --overwrite                       Replace an existing archive or restore target\n  --quiet                           Suppress progress output\n  --check-update                    Check GitHub for a newer release\n  --update                          Install the latest matching GitHub release\n  -h, --help                        Show this help\n  -V, --version                     Show version\n\nUpdates are pulled from https://github.com/juanchoraf/v_fs_backup/releases/latest.\nCompatibility aliases accepted before parsing: -nr, -rx, -ef, -ed, -er, --compresion-level."
     ));
 }

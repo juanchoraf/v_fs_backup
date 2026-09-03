@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release tag, for example v0.1.8"
+        description: "Release tag, for example v0.1.9"
         required: true
         type: string
 
@@ -22,45 +22,35 @@ jobs:
   build:
     name: Build ${{ matrix.name }}
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 30
+    timeout-minutes: 70
     strategy:
       fail-fast: false
       matrix:
         include:
           - name: linux-x86_64
             runner: ubuntu-24.04
-            os: linux
-            arch: x86_64
-            binary: target/release/v_fs_backup
-            extension: ""
+            shell: bash
+            command: sh scripts/build_binaries_linux.sh --locked --no-update
           - name: linux-arm64
             runner: ubuntu-24.04-arm
-            os: linux
-            arch: arm64
-            binary: target/release/v_fs_backup
-            extension: ""
+            shell: bash
+            command: sh scripts/build_binaries_linux.sh --locked --no-update
           - name: macos-x86_64
             runner: macos-15-intel
-            os: macos
-            arch: x86_64
-            binary: target/release/v_fs_backup
-            extension: ""
+            shell: bash
+            command: sh scripts/build_binaries_macos.sh --locked --no-update
           - name: macos-arm64
             runner: macos-15
-            os: macos
-            arch: arm64
-            binary: target/release/v_fs_backup
-            extension: ""
+            shell: bash
+            command: sh scripts/build_binaries_macos.sh --locked --no-update
           - name: windows-x86_64
             runner: windows-2025
-            os: windows
-            arch: x86_64
-            binary: target/release/v_fs_backup.exe
-            extension: ".exe"
+            shell: pwsh
+            command: .\scripts\build_binaries_windows.ps1 -Locked -NoUpdate
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           ref: ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }}
 
@@ -81,72 +71,62 @@ jobs:
         env:
           RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }}
         run: |
-          version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | sed -n '1p')
+          version=$(sed -n 's/^[[:space:]]*version[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' Cargo.toml | sed -n '1p')
           tag_version="${RELEASE_TAG#v}"
           if [ "$version" != "$tag_version" ]; then
             echo "Cargo.toml version $version does not match release tag $RELEASE_TAG" >&2
             exit 1
           fi
 
-      - name: Build release binary on Unix
-        if: ${{ matrix.os != 'windows' }}
+      - name: Prepare Linux build dependencies
+        if: startsWith(matrix.runner, 'ubuntu-')
         shell: bash
-        timeout-minutes: 20
-        run: cargo build --release --locked
+        timeout-minutes: 15
+        run: sh scripts/setup_linux_build_deps.sh
 
-      - name: Build release binary on Windows
-        if: ${{ matrix.os == 'windows' }}
+      - name: Install Windows package tools
+        if: matrix.shell == 'pwsh'
         shell: pwsh
-        timeout-minutes: 20
-        run: cargo build --release --locked
-
-      - name: Package release binary on Unix
-        if: ${{ matrix.os != 'windows' }}
-        shell: bash
+        timeout-minutes: 15
         run: |
-          version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | sed -n '1p')
-          versioned_name="v_fs_backup_v${version}"
-          artifact="${versioned_name}_${{ matrix.os }}_${{ matrix.arch }}${{ matrix.extension }}"
-          out_dir="versions/${versioned_name}"
+          if (-not (Get-Command wix.exe -ErrorAction SilentlyContinue)) {
+            dotnet tool install --global wix
+          }
+          "$env:USERPROFILE\.dotnet\tools" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
 
-          mkdir -p "$out_dir"
-          cp "${{ matrix.binary }}" "$out_dir/$artifact"
-          chmod 0755 "$out_dir/$artifact"
-
-          if command -v sha256sum >/dev/null 2>&1; then
-            (
-              cd "$out_dir"
-              sha256sum "$artifact" > "$artifact.sha256"
-            )
-          else
-            (
-              cd "$out_dir"
-              shasum -a 256 "$artifact" > "$artifact.sha256"
-            )
-          fi
-
-      - name: Package release binary on Windows
-        if: ${{ matrix.os == 'windows' }}
+      - name: Prepare Windows code signing certificate
+        if: matrix.shell == 'pwsh'
         shell: pwsh
+        timeout-minutes: 2
+        env:
+          V_FS_BACKUP_CODESIGN_PFX_BASE64: ${{ secrets.V_FS_BACKUP_CODESIGN_PFX_BASE64 }}
         run: |
-          $versionLine = Select-String -Path Cargo.toml -Pattern '^\s*version\s*=\s*"([^"]+)"' | Select-Object -First 1
-          if (-not $versionLine) {
-            throw "Unable to read package version from Cargo.toml"
+          if ([string]::IsNullOrWhiteSpace($env:V_FS_BACKUP_CODESIGN_PFX_BASE64)) {
+            Write-Host "No Windows code signing PFX secret configured."
+            exit 0
           }
 
-          $version = $versionLine.Matches[0].Groups[1].Value
-          $versionedName = "v_fs_backup_v$version"
-          $artifact = "${versionedName}_${{ matrix.os }}_${{ matrix.arch }}${{ matrix.extension }}"
-          $outDir = Join-Path "versions" $versionedName
-          $outPath = Join-Path $outDir $artifact
+          $certPath = Join-Path $env:RUNNER_TEMP "v_fs_backup_codesign.pfx"
+          [IO.File]::WriteAllBytes($certPath, [Convert]::FromBase64String($env:V_FS_BACKUP_CODESIGN_PFX_BASE64))
+          "V_FS_BACKUP_CODESIGN_PFX=$certPath" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
-          New-Item -ItemType Directory -Force -Path $outDir | Out-Null
-          Copy-Item "${{ matrix.binary }}" $outPath -Force
+      - name: Build artifacts on Unix
+        if: matrix.shell == 'bash'
+        shell: bash
+        timeout-minutes: 45
+        run: ${{ matrix.command }}
 
-          $hash = (Get-FileHash -Algorithm SHA256 -Path $outPath).Hash.ToLowerInvariant()
-          Set-Content -Encoding ASCII -Path "$outPath.sha256" -Value "$hash  $artifact"
+      - name: Build artifacts on Windows
+        if: matrix.shell == 'pwsh'
+        shell: pwsh
+        timeout-minutes: 45
+        env:
+          V_FS_BACKUP_CODESIGN_PASSWORD: ${{ secrets.V_FS_BACKUP_CODESIGN_PASSWORD }}
+          V_FS_BACKUP_CODESIGN_THUMBPRINT: ${{ secrets.V_FS_BACKUP_CODESIGN_THUMBPRINT }}
+          V_FS_BACKUP_CODESIGN_TIMESTAMP_URL: ${{ secrets.V_FS_BACKUP_CODESIGN_TIMESTAMP_URL }}
+        run: ${{ matrix.command }}
 
-      - name: Upload release binary
+      - name: Upload build artifacts
         uses: actions/upload-artifact@v7
         with:
           name: v_fs_backup-${{ matrix.name }}
@@ -159,7 +139,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
-      - name: Download release binaries
+      - name: Download build artifacts
         uses: actions/download-artifact@v8
         with:
           path: release-assets

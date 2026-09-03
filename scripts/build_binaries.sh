@@ -48,13 +48,13 @@ esac
 
 case "$(uname -s 2>/dev/null || printf unknown)" in
     Linux)
-        exec "$SCRIPT_DIR/build_binaries_linux.sh" "$@"
+        exec sh "$SCRIPT_DIR/build_binaries_linux.sh" "$@"
         ;;
     Darwin)
-        exec "$SCRIPT_DIR/build_binaries_macos.sh" "$@"
+        exec sh "$SCRIPT_DIR/build_binaries_macos.sh" "$@"
         ;;
     FreeBSD|OpenBSD|NetBSD|DragonFly|SunOS)
-        exec "$SCRIPT_DIR/build_binaries_unix.sh" "$@"
+        exec sh "$SCRIPT_DIR/build_binaries_unix.sh" "$@"
         ;;
     MINGW*|MSYS*|CYGWIN*)
         run_windows_builder "$@"
