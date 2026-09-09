@@ -16,6 +16,17 @@ Archives use a zstd-compressed stream. Repeated files and build trees can
 compress very well. Photos, videos, ZIP files, encrypted files, and other data
 that is already compressed may not become much smaller.
 
+Made with AI (Codex) 🤖
+
+## Supported OS
+
+| Platform  | Support |
+| --------- |:-------:|
+| Linux     |   ✅    |
+| Windows   |   ✅    |
+| macOS     |   ✅    |
+| Unix      |   ✅    |
+
 ## Install From Release Packages
 
 Download the matching artifact from GitHub Releases. Users install packages or
