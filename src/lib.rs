@@ -1,3 +1,7 @@
+use dialoguer::{
+    Select,
+    theme::{ColorfulTheme, Theme},
+};
 use std::borrow::Cow;
 use std::cmp::Reverse;
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -23,7 +27,9 @@ include!("windows_terminal.rs");
 include!("core.rs");
 
 include!("types.rs");
+include!("parallelism.rs");
 include!("completion.rs");
+include!("interactive_prompts.rs");
 include!("archive_types.rs");
 include!("cli.rs");
 include!("app.rs");

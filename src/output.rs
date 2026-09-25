@@ -3,8 +3,16 @@ fn color(code: &str, text: impl AsRef<str>) -> String {
 }
 
 fn fact_line(label: &str, value: impl AsRef<str>) -> String {
-    let label = format!("{label:<30}:");
-    format!("  {} {}", color(ANSI_CYAN, label), color(ANSI_GREEN, value))
+    fact_line_with_value_color(label, value, ANSI_GREEN)
+}
+
+fn fact_line_with_value_color(
+    label: &str,
+    value: impl AsRef<str>,
+    value_color: &str,
+) -> String {
+    let label = format!("{label:<26}:");
+    format!("  {} {}", color(ANSI_CYAN, label), color(value_color, value))
 }
 
 fn print_backup_summary(stats: &BackupStats, elapsed: Duration) {
@@ -19,7 +27,11 @@ fn print_backup_summary(stats: &BackupStats, elapsed: Duration) {
         human_bytes(stats.stored_file_bytes),
     ));
     output.push('\n');
-    output.push_str(&fact_line("Archive size", human_bytes(stats.archive_bytes)));
+    output.push_str(&fact_line_with_value_color(
+        "Backup file size",
+        human_bytes(stats.archive_bytes),
+        ANSI_YELLOW,
+    ));
     if stats.deduplicated_bytes > 0 {
         output.push('\n');
         output.push_str(&fact_line(
@@ -31,9 +43,10 @@ fn print_backup_summary(stats: &BackupStats, elapsed: Duration) {
         ));
     }
     output.push('\n');
-    output.push_str(&fact_line(
-        "Archive",
+    output.push_str(&fact_line_with_value_color(
+        "Backup file",
         stats.archive_path.display().to_string(),
+        ANSI_YELLOW,
     ));
     output.push('\n');
     output.push_str(&fact_line("Total time", human_duration(elapsed)));
@@ -71,17 +84,24 @@ fn print_sized_progress(label: &str, bytes: u64, path: &str, note: Option<&str>)
     let suffix = note
         .map(|value| format!(" {}", color(ANSI_YELLOW, format!("({value})"))))
         .unwrap_or_default();
-    print_padded_stderr(v_concat!(
+    v_concat_eprintln!(
         "{} ({}) {}{}",
         label,
         color(ANSI_GREEN, size),
         path,
         suffix
-    ));
+    );
 }
 
 fn print_time_row(label: &str, duration: Duration) {
     print_padded_stderr(color(
+        ANSI_YELLOW,
+        format!("{:<14} {}", label, human_duration(duration)),
+    ));
+}
+
+fn print_time_row_without_bottom_space(label: &str, duration: Duration) {
+    print_top_padded_stderr(color(
         ANSI_YELLOW,
         format!("{:<14} {}", label, human_duration(duration)),
     ));
@@ -104,10 +124,4 @@ fn human_duration(duration: Duration) -> String {
     } else {
         format!("{:.2}s", duration.as_secs_f64())
     }
-}
-
-fn default_jobs() -> usize {
-    std::thread::available_parallelism()
-        .map(|count| count.get().saturating_sub(1).max(1))
-        .unwrap_or(1)
 }

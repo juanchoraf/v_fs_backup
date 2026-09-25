@@ -88,7 +88,7 @@ fn print_archive_progress(
     }
     output.push('\n');
     output.push_str(&fact_line("Elapsed", human_duration(elapsed)));
-    print_padded_stderr(output);
+    print_top_padded_stderr(output);
 }
 
 fn progress_file_name(path: &Path) -> String {

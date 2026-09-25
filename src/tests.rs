@@ -114,49 +114,7 @@ fn parses_requested_multi_letter_aliases() {
 }
 
 #[test]
-fn interactive_line_splits_quoted_paths() {
-    let words = split_interactive_line(r#"compress "C:\Users\A B" "D:\Backups\one.fsb""#).unwrap();
-
-    assert_eq!(
-        words,
-        vec![
-            "compress".to_string(),
-            r#"C:\Users\A B"#.to_string(),
-            r#"D:\Backups\one.fsb"#.to_string(),
-        ]
-    );
-}
-
-#[test]
-fn interactive_compress_shortcut_maps_to_cli_args() {
-    let args = interactive_args_from_line(r#"compress "/data/src" "/backup/data.fsb""#).unwrap();
-    let cli = Cli::parse_from(args);
-
-    assert_eq!(cli.dir, vec!["/data/src"]);
-    assert_eq!(cli.to, PathBuf::from("/backup/data.fsb"));
-}
-
-#[test]
-fn interactive_decompress_shortcut_maps_to_restore_args() {
-    let args = interactive_args_from_line(r#"decompress "backup.fsb" "restore dir""#).unwrap();
-    let cli = Cli::parse_from(args);
-
-    assert_eq!(cli.restore, Some(PathBuf::from("backup.fsb")));
-    assert_eq!(cli.to, PathBuf::from("restore dir"));
-}
-
-#[test]
-fn interactive_command_completion_includes_commands_and_flags() {
-    let commands = command_completion_pairs("com");
-    assert!(commands.iter().any(|pair| pair.replacement == "compress "));
-
-    let flags = command_completion_pairs("--to");
-    assert_eq!(flags.len(), 1);
-    assert_eq!(flags[0].replacement, "--to ");
-}
-
-#[test]
-fn update_commands_parse_from_cli_and_interactive_input() {
+fn update_commands_parse_from_cli_input() {
     let cli_command = parse_command_from([
         OsString::from("v_fs_backup"),
         OsString::from("--check-update"),
@@ -164,11 +122,6 @@ fn update_commands_parse_from_cli_and_interactive_input() {
     .unwrap()
     .unwrap();
     assert!(matches!(cli_command, ParsedCommand::CheckUpdate));
-
-    let interactive_command = parse_command_from(interactive_args_from_line("update").unwrap())
-        .unwrap()
-        .unwrap();
-    assert!(matches!(interactive_command, ParsedCommand::Update));
 }
 
 #[test]
@@ -198,15 +151,82 @@ fn interactive_path_completion_quotes_paths_with_spaces() {
     };
     let pairs = path_completion_pairs(&token);
     let expected_display = format!("{}{}", spaced.display(), std::path::MAIN_SEPARATOR);
-    let expected_replacement = format!("\"{expected_display}\"");
+    let expected_replacement = format!("\"{expected_display}");
 
     assert!(pairs.iter().any(|pair| {
         pair.display == expected_display && pair.replacement == expected_replacement
     }));
     assert_eq!(
-        quote_path_completion(r"C:\Program Files", None),
+        quote_path_candidate(r"C:\Program Files", None, false),
         r#""C:\Program Files""#
     );
+}
+
+#[test]
+fn interactive_directory_completion_keeps_quotes_open_for_children() {
+    assert_eq!(
+        quote_path_candidate(r"C:\Program Files\", None, true),
+        r#""C:\Program Files\"#
+    );
+}
+
+#[test]
+fn guided_path_input_accepts_quoted_and_escaped_spaces() {
+    assert_eq!(
+        clean_interactive_path(r#""C:\Program Files\Backup""#),
+        r"C:\Program Files\Backup"
+    );
+    assert_eq!(
+        clean_interactive_path(r"/Volumes/Backup\ Drive/archive.fsb"),
+        "/Volumes/Backup Drive/archive.fsb"
+    );
+    assert_eq!(
+        clean_interactive_path(r"\\server\share\archive.fsb"),
+        r"\\server\share\archive.fsb"
+    );
+}
+
+#[test]
+fn guided_backup_defaults_never_replace_an_fsb_source() {
+    assert_eq!(
+        default_archive_path(Path::new("existing.fsb")),
+        PathBuf::from("existing_backup.fsb")
+    );
+    assert_eq!(
+        default_archive_path(Path::new("source-folder")),
+        PathBuf::from("source-folder.fsb")
+    );
+}
+
+#[test]
+fn guided_backup_validates_files_and_folders_separately() {
+    let tmp = tempdir().unwrap();
+    let file = tmp.path().join("source.txt");
+    fs::write(&file, b"source").unwrap();
+
+    assert!(backup_source_is_valid(BackupSourceKind::File, &file));
+    assert!(!backup_source_is_valid(BackupSourceKind::Folder, &file));
+    assert!(backup_source_is_valid(BackupSourceKind::Folder, tmp.path()));
+    assert!(!backup_source_is_valid(BackupSourceKind::File, tmp.path()));
+}
+
+#[test]
+fn interactive_escape_does_not_wait_for_a_second_key() {
+    assert_eq!(interactive_editor_config().keyseq_timeout(), Some(100));
+}
+
+#[test]
+fn hashing_job_presets_scale_from_detected_cpu_parallelism() {
+    assert_eq!(
+        hashing_job_presets_for(98),
+        HashingJobPresets {
+            recommended: 98,
+            max: 98,
+            medium: 44,
+            low: 10,
+        }
+    );
+    assert_eq!(hashing_job_presets_for(1).low, 1);
 }
 
 #[test]

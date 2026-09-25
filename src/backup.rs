@@ -11,11 +11,11 @@ pub fn create_backup(request: BackupRequest) -> Result<BackupStats> {
     }
 
     if !request.quiet {
-        print_padded_stderr(v_concat!(
+        v_concat_eprintln!(
             "Scanning {} root(s) with {} worker(s)...",
             walk_roots.len(),
             request.jobs
-        ));
+        );
     }
 
     let scan_started = Instant::now();
@@ -29,7 +29,7 @@ pub fn create_backup(request: BackupRequest) -> Result<BackupStats> {
     }
 
     if !request.quiet {
-        print_padded_stderr(v_concat!("Hashing {} selected entrie(s)...", entries.len()));
+        v_concat_eprintln!("Hashing {} selected entrie(s)...", entries.len());
     }
     let hash_started = Instant::now();
     hash_files(&mut entries, request.jobs)?;
@@ -94,7 +94,7 @@ pub fn create_backup(request: BackupRequest) -> Result<BackupStats> {
             EntryKind::Directory => {
                 stats.directories += 1;
                 if !request.quiet {
-                    print_padded_stderr(v_concat!("Copy Dir {}", entry.archive_path));
+                    v_concat_eprintln!("Copy Dir {}", entry.archive_path);
                 }
                 write_json_record(
                     &mut encoder,
@@ -108,11 +108,11 @@ pub fn create_backup(request: BackupRequest) -> Result<BackupStats> {
                     format!("failed to read symlink {}", entry.source_path.display())
                 })?;
                 if !request.quiet {
-                    print_padded_stderr(v_concat!(
+                    v_concat_eprintln!(
                         "Copy Link {} -> {}",
                         entry.archive_path,
                         target.display()
-                    ));
+                    );
                 }
                 let target_is_dir = fs::metadata(&entry.source_path).ok().map(|m| m.is_dir());
                 write_json_record(
@@ -180,7 +180,7 @@ pub fn create_backup(request: BackupRequest) -> Result<BackupStats> {
         }
     }
     if !request.quiet {
-        print_time_row("Copy/Compress", copy_compress_started.elapsed());
+        print_time_row_without_bottom_space("Copy/Compress", copy_compress_started.elapsed());
     }
     let save_archive_started = Instant::now();
     let save_monitor = ArchiveProgressMonitor::start(
@@ -200,7 +200,7 @@ pub fn create_backup(request: BackupRequest) -> Result<BackupStats> {
     save_monitor.finish();
     flush_result?;
     if !request.quiet {
-        print_time_row("Save Archive", save_archive_started.elapsed());
+        print_time_row_without_bottom_space("Save Archive", save_archive_started.elapsed());
     }
     stats.archive_bytes = fs::metadata(&archive_path)
         .with_context(|| format!("failed to stat archive {}", archive_path.display()))?

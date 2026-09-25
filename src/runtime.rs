@@ -70,6 +70,10 @@ fn print_padded_stderr(message: impl AsRef<str>) {
     v_concat_eprintln!("\n{}\n", message.as_ref());
 }
 
+fn print_top_padded_stderr(message: impl AsRef<str>) {
+    v_concat_eprintln!("\n{}", message.as_ref());
+}
+
 fn initialize_terminal() {
     #[cfg(windows)]
     {

@@ -77,15 +77,15 @@ Start an installed copy with:
 v_fs_backup
 ```
 
-The console supports command and path completion with `Tab`, including paths
-that contain spaces.
+The app opens a guided console. Use the arrow keys to
+choose an action and answer each prompt for the source, destination,
+compression, recursion, exclusions, and overwrite behavior. Path prompts
+support completion with `Tab`, including paths that contain spaces.
+The backup flow asks separately for `A File` or `A Folder` and validates the
+selected path accordingly. Press `Esc` or choose `Back` to return to the
+previous step; nested menus also provide `Quit`.
 
-```text
-v_fs_backup> compress /path/to/source /backups/source.fsb
-v_fs_backup> decompress /backups/source.fsb /path/to/restore
-v_fs_backup> clear
-v_fs_backup> exit
-```
+Direct command-line flags remain available for scripts and automation.
 
 On Windows, the app enables ANSI colors in the console and the installed
 shortcut uses the embedded app icon.

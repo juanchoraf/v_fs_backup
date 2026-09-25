@@ -1,52 +1,7 @@
-const INTERACTIVE_COMMANDS: &[&str] = &[
-    "backup",
-    "compress",
-    "decompress",
-    "restore",
-    "check-update",
-    "update",
-    "help",
-    "version",
-    "clear",
-    "exit",
-    "quit",
-    "q",
-    "--file",
-    "--dir",
-    "--regex",
-    "--rx",
-    "-rx",
-    "--exclude-file",
-    "--ef",
-    "-ef",
-    "--exclude-dir",
-    "--ed",
-    "-ed",
-    "--exclude-regex",
-    "--er",
-    "-er",
-    "--to",
-    "--restore",
-    "--compression-level",
-    "--compresion-level",
-    "--jobs",
-    "--overwrite",
-    "--quiet",
-    "--no-recursive",
-    "--check-update",
-    "--update",
-    "-n",
-    "-nr",
-    "--help",
-    "-h",
-    "--version",
-    "-V",
-];
-
 #[derive(Debug, Clone, Copy)]
-struct InteractiveHelper;
+struct PathPromptHelper;
 
-impl rustyline::completion::Completer for InteractiveHelper {
+impl rustyline::completion::Completer for PathPromptHelper {
     type Candidate = rustyline::completion::Pair;
 
     fn complete(
@@ -56,38 +11,27 @@ impl rustyline::completion::Completer for InteractiveHelper {
         _ctx: &rustyline::Context<'_>,
     ) -> rustyline::Result<(usize, Vec<Self::Candidate>)> {
         let token = completion_token(line, pos);
-        let pairs = if should_complete_command(line, &token) {
-            command_completion_pairs(&token.unquoted)
-        } else {
-            path_completion_pairs(&token)
-        };
-
-        Ok((token.start, pairs))
+        Ok((token.start, path_completion_pairs(&token)))
     }
 }
 
-impl rustyline::hint::Hinter for InteractiveHelper {
+impl rustyline::hint::Hinter for PathPromptHelper {
     type Hint = String;
 }
 
-impl rustyline::highlight::Highlighter for InteractiveHelper {
+impl rustyline::highlight::Highlighter for PathPromptHelper {
     fn highlight_prompt<'b, 's: 'b, 'p: 'b>(
         &'s self,
         prompt: &'p str,
-        default: bool,
+        _default: bool,
     ) -> Cow<'b, str> {
-        let _ = default;
-        if prompt == INTERACTIVE_PROMPT {
-            Cow::Owned(format!("{ANSI_CYAN}{prompt}{ANSI_WHITE}"))
-        } else {
-            Cow::Borrowed(prompt)
-        }
+        Cow::Owned(format!("{ANSI_CYAN}{prompt}{ANSI_WHITE}"))
     }
 }
 
-impl rustyline::validate::Validator for InteractiveHelper {}
+impl rustyline::validate::Validator for PathPromptHelper {}
 
-impl rustyline::Helper for InteractiveHelper {}
+impl rustyline::Helper for PathPromptHelper {}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct CompletionToken {
@@ -157,23 +101,6 @@ fn previous_char_boundary(line: &str, mut pos: usize) -> usize {
     pos
 }
 
-fn should_complete_command(line: &str, token: &CompletionToken) -> bool {
-    line[..token.start].trim().is_empty() || token.unquoted.starts_with('-')
-}
-
-fn command_completion_pairs(prefix: &str) -> Vec<rustyline::completion::Pair> {
-    let mut pairs = INTERACTIVE_COMMANDS
-        .iter()
-        .filter(|command| command.starts_with(prefix))
-        .map(|command| rustyline::completion::Pair {
-            display: (*command).to_owned(),
-            replacement: format!("{command} "),
-        })
-        .collect::<Vec<_>>();
-    pairs.sort_by(|left, right| left.display.cmp(&right.display));
-    pairs
-}
-
 fn path_completion_pairs(token: &CompletionToken) -> Vec<rustyline::completion::Pair> {
     let prefix = split_completion_path(&token.unquoted);
     let Ok(entries) = fs::read_dir(&prefix.parent) else {
@@ -188,7 +115,8 @@ fn path_completion_pairs(token: &CompletionToken) -> Vec<rustyline::completion::
                 return None;
             }
 
-            let suffix = if entry.file_type().is_ok_and(|kind| kind.is_dir()) {
+            let is_directory = entry.file_type().is_ok_and(|kind| kind.is_dir());
+            let suffix = if is_directory {
                 prefix.separator.to_string()
             } else {
                 String::new()
@@ -196,7 +124,7 @@ fn path_completion_pairs(token: &CompletionToken) -> Vec<rustyline::completion::
             let path = format!("{}{}{}", prefix.display_prefix, name, suffix);
             Some(rustyline::completion::Pair {
                 display: path.clone(),
-                replacement: quote_path_completion(&path, token.quote),
+                replacement: quote_path_candidate(&path, token.quote, is_directory),
             })
         })
         .collect::<Vec<_>>();
@@ -290,24 +218,32 @@ fn name_matches_prefix(name: &str, partial: &str) -> bool {
     }
 }
 
-fn quote_path_completion(path: &str, quote: Option<char>) -> String {
+fn quote_path_candidate(path: &str, quote: Option<char>, is_directory: bool) -> String {
     let needs_quotes = quote.is_some() || path.chars().any(char::is_whitespace);
     if !needs_quotes {
         return path.to_owned();
     }
 
     if quote == Some('\'') && !path.contains('\'') {
-        return format!("'{path}'");
+        return quote_completed_path(path, '\'', is_directory);
     }
     if quote == Some('"') && !path.contains('"') {
-        return format!("\"{path}\"");
+        return quote_completed_path(path, '"', is_directory);
     }
     if !path.contains('"') {
-        return format!("\"{path}\"");
+        return quote_completed_path(path, '"', is_directory);
     }
     if !path.contains('\'') {
-        return format!("'{path}'");
+        return quote_completed_path(path, '\'', is_directory);
     }
 
     path.to_owned()
+}
+
+fn quote_completed_path(path: &str, quote: char, is_directory: bool) -> String {
+    if is_directory {
+        format!("{quote}{path}")
+    } else {
+        format!("{quote}{path}{quote}")
+    }
 }
