@@ -1,16 +1,16 @@
 [package]
 name = "v_fs_backup"
-version = "0.1.11"
+version = "0.1.12"
 edition = "2024"
 
 [dependencies]
 dialoguer = "0.12.0"
-rustyline = "18.0.1"
+rustyline = "19.0.0"
 v_concat = "0.1.3"
-zstd = { version = "0.14.0", default-features = false }
+zstd = { version = "0.14.5", default-features = false }
 
 [target.'cfg(unix)'.dependencies]
-libc = "0.2.189"
+libc = "0.2.191"
 
 [profile.dev]
 incremental = false
